@@ -15,27 +15,27 @@ const BANK_SENDERS: Array<[RegExp, string]> = [
   [/YESBANK/i, 'Yes Bank'],
   [/IDFCBK/i, 'IDFC First Bank'],
   [/INDB|INDUS|VM-INDUS/i, 'IndusInd Bank'],
-  [/RBLBK|VM-RBL|^RBL/i, 'RBL Bank'],
+  [/RBLBK|VM-RBL|RBL/i, 'RBL Bank'],
   [/BANDHAN|VM-BANDHAN|BANDBK/i, 'Bandhan Bank'],
 
   // PSU (government) banks
   [/SBIINB|SBIUPI|SBIIN/i, 'State Bank of India'],
-  [/PNBSMS|^PNB/i, 'Punjab National Bank'],
-  [/BOBSMS|^BOB/i, 'Bank of Baroda'],
+  [/PNBSMS|PNB/i, 'Punjab National Bank'],
+  [/BOBSMS|BOB/i, 'Bank of Baroda'],
   [/CBSCNB|CNB|VM-CANARA/i, 'Canara Bank'],
-  [/BOIMSG|VM-BOI|^BOI/i, 'Bank of India'],
-  [/CBISMS|VM-CBI|^CBI/i, 'Central Bank of India'],
+  [/BOIMSG|VM-BOI|BOI/i, 'Bank of India'],
+  [/CBISMS|VM-CBI|CBI/i, 'Central Bank of India'],
   [/INBK|VM-INBK|INDIANBK/i, 'Indian Bank'],
-  [/IOBSMS|VM-IOB|^IOB/i, 'Indian Overseas Bank'],
+  [/IOBSMS|VM-IOB|IOB/i, 'Indian Overseas Bank'],
   [/BOMBANK|VM-BOMBANK|BMSMS/i, 'Bank of Maharashtra'],
-  [/PSBSMS|VM-PSB|^PSB/i, 'Punjab & Sind Bank'],
-  [/^UBI/i, 'Union Bank of India'],
+  [/PSBSMS|VM-PSB|PSB/i, 'Punjab & Sind Bank'],
+  [/UBI/i, 'Union Bank of India'],
   [/JKBK|VM-JKBK/i, 'Jammu & Kashmir Bank'],
 
   // Private / old private banks
   [/FEDBANK/i, 'Federal Bank'],
-  [/SIBM|VM-SIBM|^SIB/i, 'South Indian Bank'],
-  [/^TMB/i, 'Tamilnad Mercantile Bank'],
+  [/SIBM|VM-SIBM|SIB/i, 'South Indian Bank'],
+  [/TMB/i, 'Tamilnad Mercantile Bank'],
   [/KARNBK|VM-KARNBK/i, 'Karnataka Bank'],
   [/KVB|VM-KVB/i, 'Karur Vysya Bank'],
   [/CITYUNION|VM-CUB|^CUB/i, 'City Union Bank'],
@@ -55,13 +55,48 @@ const BANK_SENDERS: Array<[RegExp, string]> = [
   [/IPPB|VM-IPPB/i, 'India Post Payments Bank'],
 ];
 
+// Sender IDs bina pattern ke bhi bank ka naam rakh sakte hain
+// (e.g. "ADB-SBI", "VM-BOB", "SBICARDS"). Fragment fallback unhe tag karta hai.
+const BANK_NAME_FRAGMENTS: Array<[RegExp, string]> = [
+  [/\bHDFC\b/i, 'HDFC Bank'],
+  [/\bICICI\b/i, 'ICICI Bank'],
+  [/\bAXIS\b/i, 'Axis Bank'],
+  [/\bKOTAK\b/i, 'Kotak Mahindra Bank'],
+  [/\bSBI\b/i, 'State Bank of India'],
+  [/\bPNB\b/i, 'Punjab National Bank'],
+  [/\bBOB\b/i, 'Bank of Baroda'],
+  [/\bBOI\b/i, 'Bank of India'],
+  [/\bCBI\b/i, 'Central Bank of India'],
+  [/\bCANARA\b/i, 'Canara Bank'],
+  [/\bIDFC\b/i, 'IDFC First Bank'],
+  [/\bINDUS\b/i, 'IndusInd Bank'],
+  [/\bRBL\b/i, 'RBL Bank'],
+  [/\bFEDERAL\b/i, 'Federal Bank'],
+  [/\bBANDHAN\b/i, 'Bandhan Bank'],
+  [/\bPAYTM\b/i, 'Paytm Payments Bank'],
+  [/\bAU\s+(?:SMALL)?\b/i, 'AU Small Finance Bank'],
+  [/\bEQUITAS\b/i, 'Equitas Small Finance Bank'],
+  [/\bUJJIVAN\b/i, 'Ujjivan Small Finance Bank'],
+  [/\bIPPB\b/i, 'India Post Payments Bank'],
+  [/\bYES\b/i, 'Yes Bank'],
+];
+
 const detectBankName = (sender: string): string | undefined => {
   if (!sender) {
     return undefined;
   }
 
   const match = BANK_SENDERS.find(([pattern]) => pattern.test(sender));
-  return match ? match[1] : undefined;
+
+  if (match) {
+    return match[1];
+  }
+
+  const fragment = BANK_NAME_FRAGMENTS.find(([pattern]) =>
+    pattern.test(sender),
+  );
+
+  return fragment ? fragment[1] : undefined;
 };
 
 const formatDate = (timestampMs: number): string => {
@@ -79,15 +114,24 @@ export const parseSmsMessage = (
 ): ParsedTransaction | null => {
   const senderBank = detectBankName(message.address);
 
-  // Sirf bank SMS parse karo. Non-bank SMS (recharge/ad/OTP) skip.
-  // Either sender kisi known bank se hai, ya message me bank account ka
-  // reference ("A/c", "Account No") hona chahiye.
+  // Sirf non-transaction SMS (OTP/ad/promo) filter karo. Unknown sender bhi
+  // parse ho sakta hai agar body me strong transaction verb ho.
   const hasAccountReference =
     /\bA\/c\b|\b(?:Account|Acct)\s+(?:No\.?|Number|Num|[0-9*Xx]{2,})\b/i.test(
       message.body,
     );
 
-  if (!senderBank && !hasAccountReference) {
+  const hasStrongTransactionVerb =
+    /\b(debited|credited|transferred?|withdrawn|spent|refund(?:ed)?)\b/i.test(
+      message.body,
+    );
+
+  if (!senderBank && !hasAccountReference && !hasStrongTransactionVerb) {
+    console.log(
+      '[SmsParser] reject: unknown sender, no account ref, no strong verb:',
+      message.address,
+      message.body.slice(0, 80),
+    );
     return null;
   }
 

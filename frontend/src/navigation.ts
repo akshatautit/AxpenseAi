@@ -3,6 +3,8 @@ import type {BottomTabNavigationProp} from '@react-navigation/bottom-tabs';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 
 export type RootStackParamList = {
+  Onboarding: undefined;
+  OnboardingStart: undefined;
   Main: undefined;
   Analytics: undefined;
   Transactions: undefined;
@@ -11,7 +13,7 @@ export type RootStackParamList = {
 
 export type MainTabParamList = {
   Home: undefined;
-  Charts: undefined;
+  Transactions: undefined;
   Ai: undefined;
   Profile: undefined;
 };

@@ -18,8 +18,9 @@ import {ProfileScreen} from './src/screens/ProfileScreen';
 import {AnalyticsScreen} from './src/screens/AnalyticsScreen';
 import {TransactionsScreen} from './src/screens/TransactionsScreen';
 import {BottomNav, TabKey} from './src/components/BottomNav';
-import {PlaceholderScreen} from './src/components/PlaceholderScreen';
 import {AiAssistantScreen} from './src/screens/AiAssistantScreen';
+import {OnboardingScreen} from './src/screens/OnboardingScreen';
+import {OnboardingStartScreen} from './src/screens/OnboardingStartScreen';
 import {colors} from './src/theme';
 import {
   MainNavigation,
@@ -32,13 +33,13 @@ const Tab = createBottomTabNavigator<MainTabParamList>();
 
 const TAB_ROUTES: Record<TabKey, keyof MainTabParamList> = {
   home: 'Home',
-  charts: 'Charts',
+  transactions: 'Transactions',
   ai: 'Ai',
   profile: 'Profile',
 };
 
 const MainTabBar = ({state, navigation}: BottomTabBarProps) => {
-  const tabKeys: TabKey[] = ['home', 'charts', 'ai', 'profile'];
+  const tabKeys: TabKey[] = ['home', 'transactions', 'ai', 'profile'];
   const activeTab = tabKeys[state.index] ?? 'home';
   return (
     <BottomNav
@@ -63,7 +64,7 @@ const HomeTab = () => {
   );
 };
 
-const ChartsTab = () => <PlaceholderScreen icon="charts" title="Charts" />;
+const TransactionsTab = () => <TransactionsScreen />;
 const AiTab = () => <AiAssistantScreen />;
 
 const MainTabs = () => (
@@ -71,7 +72,7 @@ const MainTabs = () => (
     tabBar={MainTabBar}
     screenOptions={{headerShown: false, animation: 'none'}}>
     <Tab.Screen name="Home" component={HomeTab} />
-    <Tab.Screen name="Charts" component={ChartsTab} />
+    <Tab.Screen name="Transactions" component={TransactionsTab} />
     <Tab.Screen name="Ai" component={AiTab} />
     <Tab.Screen name="Profile" component={ProfileScreen} />
   </Tab.Navigator>
@@ -95,6 +96,16 @@ const App = () => {
     <SafeAreaProvider>
       <NavigationContainer theme={navTheme}>
         <Stack.Navigator screenOptions={{headerShown: false}}>
+          <Stack.Screen
+            name="Onboarding"
+            component={OnboardingScreen}
+            options={{animation: 'fade'}}
+          />
+          <Stack.Screen
+            name="OnboardingStart"
+            component={OnboardingStartScreen}
+            options={{animation: 'slide_from_right'}}
+          />
           <Stack.Screen name="Main" component={MainTabs} />
           <Stack.Screen
             name="Analytics"

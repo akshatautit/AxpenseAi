@@ -15,18 +15,29 @@ export const parseGenericTransactionSms = (
 
   // 1. Check if SMS looks like a transaction SMS
   const transactionKeywords =
-    /\b(debited|debited by|credited|credit|debit|spent|received|paid|withdrawn|transferred|transfer|transaction|upi|neft|rtgs|imps|pos|wallet|emi|refund(?:ed)?|cashback|reversal|atm|ecs)\b/i;
+    /\b(debited|debited by|debited from|credited|credit|debit|spent|received|paid|withdrawn|withdrawal|transferred|transfer|transaction|payment|purchase|upi|neft|rtgs|imps|pos|wallet|emi|refund(?:ed)?|cashback|reversal|atm|ecs)\b|भुगतान|जमा|निकासी|धनराशि|काटा|रुपये/i;
 
   if (!transactionKeywords.test(text)) {
+    console.log(
+      '[SmsParser] reject: no transaction keyword:',
+      text.slice(0, 80),
+    );
     return null;
   }
 
-  // 2. Extract amount
-  const amountMatch = text.match(
-    /(?:₹|Rs\.?|INR)\s*([\d,]+(?:\.\d{1,2})?)/i,
-  );
+  // 2. Extract amount. Currency symbol pehle; agar na ho to verb-anchored
+  // number bhi chale (bina currency ke Indian SMS formats ke liye).
+  const amountMatch =
+    text.match(/(?:₹|Rs\.?|INR)\s*([\d,]+(?:\.\d{1,2})?)/i) ||
+    text.match(
+      /\b(?:of|for|amount\s+(?:of|is))?\s*((?=[\d,]*[.,])[\d,]+(?:\.\d{1,2})?)\s+(?:debited|credited|withdrawn|transferred|paid|spent|refunded|cashback)\b/i,
+    );
 
   if (!amountMatch) {
+    console.log(
+      '[SmsParser] reject: no amount:',
+      text.slice(0, 80),
+    );
     return null;
   }
 
@@ -39,10 +50,16 @@ export const parseGenericTransactionSms = (
   // Inbound payout formats ("transferred to your Bank A/C") are credits.
   let type: TransactionType;
 
-  if (/\bdebit(?:ed)?\b/i.test(text)) {
+  if (
+    /\bdebit(?:ed)?\b|\bwithdraw(?:al|n)\b|\b(?:paid|spent)\s+at\b|\bpurchase(?:d)?\s+(?:at|of)\b|\bswiped\b|\bpayment\b|काटा|निकासी|भुगतान/i.test(
+      text,
+    )
+  ) {
     type = 'debit';
   } else if (
-    /\b(credited|credit|received|refund(?:ed)?|cashback|reversal|added to)\b/i.test(text) ||
+    /\b(credited|credit|received|refund(?:ed)?|cashback|reversal|added to|salary)\b|जमा/i.test(
+      text,
+    ) ||
     /\b(?:has\s+been\s+)?(?:transferred?|transfer)\s+to\s+(?:your|my)\s*(?:bank\s*)?(?:a\/?c|account)\b/i.test(text)
   ) {
     type = 'credit';
@@ -51,6 +68,10 @@ export const parseGenericTransactionSms = (
   ) {
     type = 'debit';
   } else {
+    console.log(
+      '[SmsParser] reject: cannot determine debit/credit:',
+      text.slice(0, 80),
+    );
     return null;
   }
 
@@ -62,10 +83,16 @@ export const parseGenericTransactionSms = (
     /(?:a\/c|account|acct)\s*(?:no\.?|number)?\s*(?:xx|\*+)?(\d{2,6})/i,
   );
 
-  // 6. Extract balance
-  const balanceMatch = text.match(
-    /(?:Avl\.?\s*Bal(?:ance)?|Available\s*Balance|Bal(?:ance)?)\s*(?:is|:)?\s*(?:₹|Rs\.?|INR)?\s*([\d,]+(?:\.\d{1,2})?)/i,
-  );
+  // 6. Extract balance. "Avl.Bal." / "Avl. Bal" / "A/c Bal" / "Available
+  // Balance" / "New Balance" / "Closing Bal" sab support hote hain. Purana
+  // regex fallback ke liye rakha hai (naya miss kare to purana try hota hai).
+  const balanceMatch =
+    text.match(
+      /\b(?:Avl(?:\.)?\s*Bal(?:ance)?\.?|Available\s*Bal(?:ance)?\.?|(?:A\/c|Acct|Account)\s*Bal(?:ance)?\.?|New\s*Bal(?:ance)?\.?|Closing\s*Bal(?:ance)?\.?|Bal(?:ance)?\.?)\s*[:.-]?\s*(?:is\s+)?(?:₹|Rs\.?|INR)?\s*([\d,]+(?:\.\d{1,2})?)/i,
+    ) ||
+    text.match(
+      /(?:Avl\.?\s*Bal(?:ance)?|Available\s*Balance|Bal(?:ance)?)\s*(?:is|:)?\s*(?:₹|Rs\.?|INR)?\s*([\d,]+(?:\.\d{1,2})?)/i,
+    );
 
   // 7. Extract reference / transaction ID
   const referenceMatch = text.match(

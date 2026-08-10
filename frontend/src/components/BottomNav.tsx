@@ -5,7 +5,7 @@ import Svg, {Defs, LinearGradient, Rect, Stop} from 'react-native-svg';
 import {Icon, IconName} from './Icon';
 import {colors, spacing} from '../theme';
 
-export type TabKey = 'home' | 'charts' | 'ai' | 'profile';
+export type TabKey = 'home' | 'transactions' | 'ai' | 'profile';
 
 interface TabDef {
   key: TabKey;
@@ -19,7 +19,7 @@ const radiusPill = 14;
 
 const TABS: TabDef[] = [
   {key: 'home', label: 'Home', icon: 'home'},
-  {key: 'charts', label: 'Charts', icon: 'charts'},
+  {key: 'transactions', label: 'Transactions', icon: 'fileText'},
   {key: 'ai', label: 'AI Bot', icon: 'bot'},
   {key: 'profile', label: 'Profile', icon: 'profile'},
 ];
@@ -78,6 +78,7 @@ export const BottomNav = ({
           onPress={onFabPress}
           style={({pressed}) => [
             styles.fab,
+            activeTab === 'ai' && styles.fabLow,
             pressed && styles.fabPressed,
           ]}>
           <Svg style={styles.fabBg} viewBox="0 0 60 60">
@@ -155,6 +156,9 @@ const styles = StyleSheet.create({
     shadowOffset: {width: 0, height: 6},
     shadowOpacity: 0.45,
     shadowRadius: 12,
+  },
+  fabLow: {
+    top: -FAB_SIZE * 0.1,
   },
   fabBg: {
     position: 'absolute',

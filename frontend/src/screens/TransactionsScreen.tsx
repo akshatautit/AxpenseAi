@@ -1,4 +1,4 @@
-import React, {useState} from 'react';
+import React, {useEffect, useState} from 'react';
 import {
   Pressable,
   ScrollView,
@@ -11,7 +11,10 @@ import {SafeAreaView} from 'react-native-safe-area-context';
 import {useNavigation} from '@react-navigation/native';
 import {Icon, IconName} from '../components/Icon';
 import {colors, radius, spacing} from '../theme';
-import {RootNavigation} from '../navigation';
+import {MainNavigation} from '../navigation';
+import {subscribeToNewSms} from '../features/sms/smsLive';
+import {parseSmsMessage} from '../features/sms/smsParser';
+import {ParsedTransaction} from '../features/sms/types';
 
 type Filter = 'All' | 'Income' | 'Expense' | 'Shopping' | 'Food' | 'Transport';
 
@@ -82,10 +85,46 @@ const GROUPS: {label: string; meta: string; items: Txn[]}[] = [
 
 const AI_BADGE_TEXT = 'AI';
 
+const txnToItem = (txn: ParsedTransaction): Txn => {
+  const isCredit = txn.type === 'credit';
+  return {
+    icon: isCredit ? 'arrowDownRight' : 'arrowUpRight',
+    color: isCredit ? colors.income : colors.accent,
+    title: txn.merchant || txn.sender || txn.bankName || 'Bank',
+    sub: `${txn.bankName ?? 'Bank'} · ${txn.date ?? ''}${
+      txn.time ? ` ${txn.time}` : ''
+    }`,
+    amount: `${isCredit ? '+' : '-'}₹${txn.amount.toLocaleString('en-IN')}`,
+    credit: isCredit,
+  };
+};
+
 export const TransactionsScreen = () => {
-  const navigation = useNavigation<RootNavigation>();
+  const navigation = useNavigation<MainNavigation>();
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<Filter>('All');
+  const [liveTxns, setLiveTxns] = useState<ParsedTransaction[]>([]);
+  const [liveOn, setLiveOn] = useState(false);
+
+  useEffect(() => {
+    const unsubscribe = subscribeToNewSms(message => {
+      setLiveOn(true);
+      const txn = parseSmsMessage(message);
+      if (txn) {
+        setLiveTxns(prev => [txn, ...prev]);
+      }
+    });
+    return unsubscribe;
+  }, []);
+
+  const liveItems = liveTxns.map(txnToItem);
+
+  const visibleGroups = [
+    ...(liveTxns.length > 0
+      ? [{label: 'Live', meta: `${liveTxns.length} new`, items: liveItems}]
+      : []),
+    ...GROUPS,
+  ];
 
   return (
     <SafeAreaView style={styles.container}>
@@ -98,7 +137,7 @@ export const TransactionsScreen = () => {
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Back"
-            onPress={() => navigation.goBack()}
+            onPress={() => navigation.navigate('Home')}
             style={({pressed}) => [styles.iconBtn, pressed && styles.pressed]}>
             <Icon name="chevronLeft" color={colors.textSecondary} size={20} />
           </Pressable>
@@ -166,16 +205,28 @@ export const TransactionsScreen = () => {
           onPress={() => {}}
           style={({pressed}) => [styles.syncBanner, pressed && styles.pressed]}>
           <View style={styles.syncBannerIcon}>
-            <Icon name="messageSquare" color={colors.lightBlue} size={18} />
+            <Icon
+              name={liveOn ? 'bell' : 'messageSquare'}
+              color={colors.lightBlue}
+              size={18}
+            />
           </View>
           <View style={styles.syncBannerInfo}>
-            <Text style={styles.syncBannerTitle}>Sync Bank SMS</Text>
+            <Text style={styles.syncBannerTitle}>
+              {liveOn ? 'Live sync ON' : 'Sync Bank SMS'}
+            </Text>
             <Text style={styles.syncBannerDesc}>
-              Keep transactions up to date automatically
+              {liveOn
+                ? `Watching for new bank SMS · ${liveTxns.length} live`
+                : 'New transactions appear automatically'}
             </Text>
           </View>
           <View style={styles.syncBannerBtn}>
-            <Icon name="refresh" color={colors.lightBlue} size={16} />
+            <Icon
+              name={liveOn ? 'check' : 'refresh'}
+              color={colors.lightBlue}
+              size={16}
+            />
           </View>
         </Pressable>
 
@@ -191,7 +242,7 @@ export const TransactionsScreen = () => {
           </View>
         </View>
 
-        {GROUPS.map(group => (
+        {visibleGroups.map(group => (
           <View key={group.label} style={styles.group}>
             <View style={styles.groupHeader}>
               <Text style={styles.groupLabel}>{group.label}</Text>
@@ -256,7 +307,7 @@ export const TransactionsScreen = () => {
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Back to home"
-          onPress={() => navigation.popToTop()}
+          onPress={() => navigation.navigate('Home')}
           style={({pressed}) => [styles.backBtn, pressed && styles.pressed]}>
           <Icon name="chevronLeft" color={colors.textSecondary} size={17} />
           <Text style={styles.backText}>Back to Home</Text>
