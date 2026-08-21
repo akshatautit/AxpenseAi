@@ -1,6 +1,7 @@
 import React, {useState} from 'react';
 import {ScrollView, Text, StyleSheet} from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
+import {useNavigation} from '@react-navigation/native';
 import {Button} from '../components/Button';
 import {ParsedTransaction} from '../features/sms/types';
 import {
@@ -9,12 +10,10 @@ import {
 } from '../features/sms/smsPermission';
 import {readTransactionsFromSms} from '../features/sms/smsReader';
 import {colors, radius, spacing} from '../theme';
+import {RootNavigation} from '../navigation';
 
-export interface SmsDemoScreenProps {
-  onBack: () => void;
-}
-
-export const SmsDemoScreen = ({onBack}: SmsDemoScreenProps) => {
+export const SmsDemoScreen = () => {
+  const navigation = useNavigation<RootNavigation>();
   const [permission, setPermission] = useState(false);
   const [status, setStatus] = useState('idle');
   const [transactions, setTransactions] = useState<ParsedTransaction[]>([]);
@@ -58,7 +57,11 @@ export const SmsDemoScreen = ({onBack}: SmsDemoScreenProps) => {
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.content}>
-        <Button title="← Back to home" variant="secondary" onPress={onBack} />
+        <Button
+          title="← Back to home"
+          variant="secondary"
+          onPress={() => navigation.goBack()}
+        />
 
         <Text style={styles.title}>SMS Transaction Engine</Text>
 
