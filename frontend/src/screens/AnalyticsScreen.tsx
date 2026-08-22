@@ -306,22 +306,6 @@ export const AnalyticsScreen = () => {
             <Text style={styles.summaryHint}>Positive</Text>
           </View>
         </View>
-
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="View all transactions"
-          onPress={() => navigation.navigate('Transactions')}
-          style={({pressed}) => [
-            styles.allTxCard,
-            pressed && styles.pressed,
-          ]}>
-          <Icon name="creditCard" color={colors.accent} size={20} />
-          <View style={styles.allTxInfo}>
-            <Text style={styles.allTxTitle}>View All Transactions</Text>
-            <Text style={styles.allTxDesc}>248 transactions this month</Text>
-          </View>
-          <Icon name="chevronRight" color={colors.textSecondary} size={18} />
-        </Pressable>
       </ScrollView>
     </SafeAreaView>
   );
@@ -702,29 +686,5 @@ const styles = StyleSheet.create({
     marginTop: 4,
     fontSize: 11,
     color: colors.textSecondary,
-  },
-  allTxCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.card,
-    padding: spacing.lg,
-    marginTop: spacing.lg,
-  },
-  allTxInfo: {
-    flex: 1,
-    marginLeft: spacing.md,
-  },
-  allTxTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: colors.textPrimary,
-  },
-  allTxDesc: {
-    marginTop: 2,
-    fontSize: 12,
-    color: colors.textHint,
   },
 });

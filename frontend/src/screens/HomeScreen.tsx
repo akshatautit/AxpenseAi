@@ -1,6 +1,8 @@
-import React, {useState} from 'react';
+import React, {useCallback, useEffect, useRef, useState} from 'react';
 import {
+  AppState,
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -18,6 +20,10 @@ import Svg, {
 import {Icon, IconName} from '../components/Icon';
 import {AnalyticsChart} from '../components/AnalyticsChart';
 import {colors, radius, spacing} from '../theme';
+import {DashboardData} from '../features/finance/summary';
+import {loadDashboard} from '../features/finance/summary';
+import {requestSmsPermission} from '../features/sms/smsPermission';
+import {subscribeToNewSms} from '../features/sms/smsLive';
 
 export interface HomeScreenProps {
   onOpenSmsDemo: () => void;
@@ -28,67 +34,17 @@ export interface HomeScreenProps {
 
 const FILTERS = ['1W', '1M', '3M', '1Y'];
 
-const SUMMARY = [
-  {
-    key: 'income',
-    label: 'Income',
-    amount: '₹0',
-    icon: 'arrowUpRight' as IconName,
-    color: colors.income,
-  },
-  {
-    key: 'expense',
-    label: 'Expense',
-    amount: '₹0',
-    icon: 'arrowDownRight' as IconName,
-    color: colors.expense,
-  },
-  {
-    key: 'savings',
-    label: 'Savings',
-    amount: '₹0',
-    icon: 'pieChart' as IconName,
-    color: colors.accent,
-  },
-];
+const CATEGORY_META: Record<string, {icon: IconName; color: string}> = {
+  Food: {icon: 'utensils', color: colors.warning},
+  Shopping: {icon: 'shoppingBag', color: colors.chartPurple},
+  Transport: {icon: 'car', color: colors.info},
+  Entertainment: {icon: 'film', color: colors.chartCyan},
+  'Bills & Utilities': {icon: 'creditCard', color: colors.expense},
+  Other: {icon: 'tag', color: colors.textHint},
+};
 
-const CATEGORIES = [
-  {
-    icon: 'utensils' as IconName,
-    label: 'Food & Dining',
-    amount: '₹4,250',
-    pct: 34,
-    color: colors.warning,
-  },
-  {
-    icon: 'car' as IconName,
-    label: 'Transport',
-    amount: '₹2,150',
-    pct: 18,
-    color: colors.info,
-  },
-  {
-    icon: 'shoppingBag' as IconName,
-    label: 'Shopping',
-    amount: '₹1,900',
-    pct: 15,
-    color: colors.chartPurple,
-  },
-  {
-    icon: 'creditCard' as IconName,
-    label: 'Bills & Utilities',
-    amount: '₹1,600',
-    pct: 13,
-    color: colors.expense,
-  },
-  {
-    icon: 'film' as IconName,
-    label: 'Entertainment',
-    amount: '₹980',
-    pct: 8,
-    color: colors.chartCyan,
-  },
-];
+const formatMoney = (value: number): string =>
+  value.toLocaleString('en-IN', {maximumFractionDigits: 2});
 
 export const HomeScreen = ({
   onOpenSmsDemo,
@@ -97,11 +53,128 @@ export const HomeScreen = ({
   onOpenTransactions,
 }: HomeScreenProps) => {
   const [filter, setFilter] = useState('1M');
+  const [dashboard, setDashboard] = useState<DashboardData | null>(null);
+  const [status, setStatus] = useState<
+    'loading' | 'ready' | 'denied' | 'error'
+  >('loading');
+  const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const retryTimers = useRef<Array<ReturnType<typeof setTimeout>>>([]);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const refreshDashboard = useCallback(async () => {
+    const run = async () => {
+      try {
+        const data = await loadDashboard();
+        setDashboard(data);
+        setStatus('ready');
+      } catch (error) {
+        const message = (error as Error).message ?? '';
+        setStatus(
+          message.toLowerCase().includes('permission') ? 'denied' : 'error',
+        );
+      }
+    };
+    run();
+    retryTimers.current.push(setTimeout(run, 2000));
+    retryTimers.current.push(setTimeout(run, 5000));
+  }, []);
+
+  const clearRetryTimers = () => {
+    retryTimers.current.forEach(timer => clearTimeout(timer));
+    retryTimers.current = [];
+  };
+
+  useEffect(() => {
+    refreshDashboard();
+    return clearRetryTimers;
+  }, [refreshDashboard]);
+
+  useEffect(() => {
+    const unsubscribe = subscribeToNewSms(() => {
+      if (refreshTimer.current) {
+        clearTimeout(refreshTimer.current);
+      }
+      refreshTimer.current = setTimeout(() => {
+        refreshDashboard();
+      }, 1500);
+    });
+    return () => {
+      unsubscribe();
+      if (refreshTimer.current) {
+        clearTimeout(refreshTimer.current);
+      }
+    };
+  }, [refreshDashboard]);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', state => {
+      if (state === 'active') {
+        refreshDashboard();
+      }
+    });
+    return () => subscription.remove();
+  }, [refreshDashboard]);
+
+  const onRefresh = () => {
+    setRefreshing(true);
+    refreshDashboard().finally(() => setRefreshing(false));
+  };
+
+  const onGrant = async () => {
+    const granted = await requestSmsPermission();
+    if (granted) {
+      setStatus('loading');
+      await refreshDashboard();
+    }
+  };
+
+  const summary = dashboard?.thisMonth;
+  const summaryItems = [
+    {
+      key: 'income',
+      label: 'Income',
+      amount: summary ? `₹${formatMoney(summary.income)}` : '₹0',
+      icon: 'arrowUpRight' as IconName,
+      color: colors.income,
+    },
+    {
+      key: 'expense',
+      label: 'Expense',
+      amount: summary ? `₹${formatMoney(summary.expense)}` : '₹0',
+      icon: 'arrowDownRight' as IconName,
+      color: colors.expense,
+    },
+    {
+      key: 'savings',
+      label: 'Savings',
+      amount: summary ? `₹${formatMoney(summary.savings)}` : '₹0',
+      icon: 'pieChart' as IconName,
+      color: colors.accent,
+    },
+  ];
+
+  const lastTxn = dashboard?.lastTransaction;
+  const lastTxnIsCredit = lastTxn?.type === 'credit';
+
+  const trend = dashboard?.trendPct ?? null;
+  const trendUp = (trend ?? 0) >= 0;
+
+  const categories = (dashboard?.categories ?? []).map(cat => {
+    const meta = CATEGORY_META[cat.label] ?? CATEGORY_META.Other;
+    return {...cat, ...meta};
+  });
 
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={colors.accent}
+          />
+        }
         contentContainerStyle={styles.content}>
         <View style={styles.header}>
           <View>
@@ -151,18 +224,46 @@ export const HomeScreen = ({
 
           <View style={styles.heroBody}>
             <Text style={styles.heroLabel}>TOTAL BALANCE</Text>
-            <Text style={styles.heroValue}>₹—</Text>
+            {dashboard?.balance !== undefined ? (
+              <Text style={styles.heroValue}>
+                ₹{formatMoney(dashboard.balance)}
+              </Text>
+            ) : (
+              <Text style={[styles.heroValue, styles.heroValueUnknown]}>
+                Unknown
+              </Text>
+            )}
             <View style={styles.heroChangeRow}>
-              <View style={styles.changePill}>
+              <View
+                style={[
+                  styles.changePill,
+                  trend !== null && trendUp
+                    ? styles.changePillUp
+                    : trend !== null
+                      ? styles.changePillDown
+                      : null,
+                ]}>
                 <Icon
-                  name="trendingUp"
-                  color={colors.income}
+                  name={trend !== null && !trendUp ? 'trendingDown' : 'trendingUp'}
+                  color={
+                    trend !== null && !trendUp
+                      ? colors.expense
+                      : colors.income
+                  }
                   size={12}
                   strokeWidth={2.5}
                 />
-                <Text style={styles.changePillText}>0%</Text>
+                <Text
+                  style={[
+                    styles.changePillText,
+                    trend !== null && !trendUp && styles.changePillTextDown,
+                  ]}>
+                  {trend !== null ? `${trendUp ? '+' : ''}${trend.toFixed(0)}%` : '0%'}
+                </Text>
               </View>
-              <Text style={styles.heroHint}>this month</Text>
+              <Text style={styles.heroHint}>
+                {status === 'loading' ? 'loading…' : 'vs last month'}
+              </Text>
             </View>
           </View>
 
@@ -191,7 +292,7 @@ export const HomeScreen = ({
         </View>
 
         <View style={styles.summaryRow}>
-          {SUMMARY.map(item => (
+          {summaryItems.map(item => (
             <View key={item.key} style={styles.summaryCard}>
               <View
                 style={[
@@ -205,6 +306,73 @@ export const HomeScreen = ({
             </View>
           ))}
         </View>
+
+        {status === 'denied' && (
+          <View style={styles.permissionCard}>
+            <View style={styles.permissionIcon}>
+              <Icon name="lock" color={colors.warning} size={18} />
+            </View>
+            <View style={styles.permissionBody}>
+              <Text style={styles.permissionTitle}>SMS access needed</Text>
+              <Text style={styles.permissionDesc}>
+                Bank SMS parh ke balance aur transactions dikhane ke liye.
+              </Text>
+            </View>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Grant SMS permission"
+              onPress={onGrant}
+              style={({pressed}) => [
+                styles.permissionBtn,
+                pressed && styles.pressed,
+              ]}>
+              <Text style={styles.permissionBtnText}>Grant</Text>
+            </Pressable>
+          </View>
+        )}
+
+        {lastTxn ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Last transaction"
+            onPress={onOpenTransactions}
+            style={({pressed}) => [
+              styles.lastTxnCard,
+              pressed && styles.pressed,
+            ]}>
+            <View
+              style={[
+                styles.lastTxnIcon,
+                {
+                  backgroundColor: `${
+                    lastTxnIsCredit ? colors.income : colors.accent
+                  }1A`,
+                },
+              ]}>
+              <Icon
+                name={lastTxnIsCredit ? 'arrowDownRight' : 'arrowUpRight'}
+                color={lastTxnIsCredit ? colors.income : colors.accent}
+                size={17}
+              />
+            </View>
+            <View style={styles.lastTxnBody}>
+              <Text style={styles.lastTxnTitle} numberOfLines={1}>
+                {lastTxn.merchant || lastTxn.sender || lastTxn.bankName || 'Bank'}
+              </Text>
+              <Text style={styles.lastTxnSub}>
+                Last transaction · {lastTxn.date ?? ''}
+                {lastTxn.time ? ` ${lastTxn.time}` : ''}
+              </Text>
+            </View>
+            <Text
+              style={[
+                styles.lastTxnAmount,
+                lastTxnIsCredit ? styles.lastTxnCredit : styles.lastTxnDebit,
+              ]}>
+              {lastTxnIsCredit ? '+' : '-'}₹{formatMoney(lastTxn.amount)}
+            </Text>
+          </Pressable>
+        ) : null}
 
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
@@ -269,39 +437,51 @@ export const HomeScreen = ({
           </View>
 
           <View style={styles.categoryCard}>
-            {CATEGORIES.map((cat, index) => (
-              <View
-                key={cat.label}
-                style={[
-                  styles.categoryRow,
-                  index < CATEGORIES.length - 1 && styles.categoryRowBorder,
-                ]}>
-                <View
-                  style={[
-                    styles.categoryIcon,
-                    {backgroundColor: `${cat.color}1A`},
-                  ]}>
-                  <Icon name={cat.icon} color={cat.color} size={16} />
-                </View>
-                <View style={styles.categoryBody}>
-                  <View style={styles.categoryTop}>
-                    <Text style={styles.categoryLabel}>{cat.label}</Text>
-                    <Text style={styles.categoryAmount}>
-                      {cat.amount}
-                      <Text style={styles.categoryPct}>  ·  {cat.pct}%</Text>
-                    </Text>
-                  </View>
-                  <View style={styles.progressTrack}>
-                    <View
-                      style={[
-                        styles.progressFill,
-                        {width: `${cat.pct}%`, backgroundColor: cat.color},
-                      ]}
-                    />
-                  </View>
-                </View>
+            {categories.length === 0 ? (
+              <View style={styles.emptyRow}>
+                <Text style={styles.emptyText}>
+                  Abhi tak koi expense nahi mila. Transaction aate hi yahan
+                  categories dikhengi.
+                </Text>
               </View>
-            ))}
+            ) : (
+              categories.map((cat, index) => (
+                <View
+                  key={cat.label}
+                  style={[
+                    styles.categoryRow,
+                    index < categories.length - 1 && styles.categoryRowBorder,
+                  ]}>
+                  <View
+                    style={[
+                      styles.categoryIcon,
+                      {backgroundColor: `${cat.color}1A`},
+                    ]}>
+                    <Icon name={cat.icon} color={cat.color} size={16} />
+                  </View>
+                  <View style={styles.categoryBody}>
+                    <View style={styles.categoryTop}>
+                      <Text style={styles.categoryLabel}>{cat.label}</Text>
+                      <Text style={styles.categoryAmount}>
+                        ₹{formatMoney(cat.amount)}
+                        <Text style={styles.categoryPct}>  ·  {cat.pct}%</Text>
+                      </Text>
+                    </View>
+                    <View style={styles.progressTrack}>
+                      <View
+                        style={[
+                          styles.progressFill,
+                          {
+                            width: `${cat.pct}%`,
+                            backgroundColor: cat.color,
+                          },
+                        ]}
+                      />
+                    </View>
+                  </View>
+                </View>
+              ))
+            )}
           </View>
         </View>
 
@@ -441,6 +621,11 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: colors.textPrimary,
     letterSpacing: 0.5,
+  },
+  heroValueUnknown: {
+    fontSize: 30,
+    fontWeight: '600',
+    color: '#93C5FD',
   },
   heroChangeRow: {
     marginTop: spacing.md,
@@ -649,5 +834,107 @@ const styles = StyleSheet.create({
     marginTop: 2,
     fontSize: 12,
     color: colors.textHint,
+  },
+  changePillUp: {
+    backgroundColor: 'rgba(34,197,94,0.15)',
+  },
+  changePillDown: {
+    backgroundColor: 'rgba(239,68,68,0.15)',
+  },
+  changePillTextDown: {
+    color: colors.expense,
+  },
+  permissionCard: {
+    marginTop: spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.lg,
+    padding: spacing.lg,
+    gap: spacing.md,
+  },
+  permissionIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: radius.pill,
+    backgroundColor: 'rgba(245,158,11,0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  permissionBody: {
+    flex: 1,
+  },
+  permissionTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: colors.textPrimary,
+  },
+  permissionDesc: {
+    marginTop: 2,
+    fontSize: 12,
+    color: colors.textHint,
+  },
+  permissionBtn: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: radius.pill,
+    backgroundColor: colors.primary,
+  },
+  permissionBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.textPrimary,
+  },
+  lastTxnCard: {
+    marginTop: spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.lg,
+    padding: spacing.lg,
+  },
+  lastTxnIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: radius.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: spacing.md,
+  },
+  lastTxnBody: {
+    flex: 1,
+  },
+  lastTxnTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.textPrimary,
+  },
+  lastTxnSub: {
+    marginTop: 2,
+    fontSize: 12,
+    color: colors.textHint,
+  },
+  lastTxnAmount: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  lastTxnCredit: {
+    color: colors.income,
+  },
+  lastTxnDebit: {
+    color: colors.accent,
+  },
+  emptyRow: {
+    paddingVertical: spacing.xl,
+    alignItems: 'center',
+  },
+  emptyText: {
+    fontSize: 13,
+    color: colors.textHint,
+    textAlign: 'center',
   },
 });
