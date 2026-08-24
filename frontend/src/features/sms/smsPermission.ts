@@ -1,6 +1,12 @@
 import {PermissionsAndroid, Platform} from 'react-native';
 
-const PERMISSION = PermissionsAndroid.PERMISSIONS.READ_SMS;
+// READ_SMS → inbox padhne ke liye (dashboard/backfill).
+// RECEIVE_SMS → live transaction events ke liye (SMS_RECEIVED broadcast).
+// Dono zaroori hain — ek ke bina pipeline adhoori reh jaati hai.
+const SMS_PERMISSIONS = [
+  PermissionsAndroid.PERMISSIONS.READ_SMS,
+  PermissionsAndroid.PERMISSIONS.RECEIVE_SMS,
+];
 
 export const hasSmsPermission = async (): Promise<boolean> => {
   if (Platform.OS !== 'android') {
@@ -8,7 +14,12 @@ export const hasSmsPermission = async (): Promise<boolean> => {
   }
 
   try {
-    return await PermissionsAndroid.check(PERMISSION);
+    for (const permission of SMS_PERMISSIONS) {
+      if (!(await PermissionsAndroid.check(permission))) {
+        return false;
+      }
+    }
+    return true;
   } catch {
     return false;
   }
@@ -20,18 +31,11 @@ export const requestSmsPermission = async (): Promise<boolean> => {
   }
 
   try {
-    const result = await PermissionsAndroid.request(
-      PERMISSION,
-      {
-        title: 'SMS Access Needed',
-        message:
-          'Axpense reads transaction SMS from your bank to automatically track your expenses.',
-        buttonPositive: 'Allow',
-        buttonNegative: 'Deny',
-      },
-    );
+    const results = await PermissionsAndroid.requestMultiple(SMS_PERMISSIONS);
 
-    return result === PermissionsAndroid.RESULTS.GRANTED;
+    return SMS_PERMISSIONS.every(
+      permission => results[permission] === PermissionsAndroid.RESULTS.GRANTED,
+    );
   } catch {
     return false;
   }

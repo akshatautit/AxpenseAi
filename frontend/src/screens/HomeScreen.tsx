@@ -61,8 +61,22 @@ export const HomeScreen = ({
   const retryTimers = useRef<Array<ReturnType<typeof setTimeout>>>([]);
   const [refreshing, setRefreshing] = useState(false);
 
+  // Latest status ka ref — timer callbacks me stale state na padhe.
+  const statusRef = useRef(status);
+  useEffect(() => {
+    statusRef.current = status;
+  }, [status]);
+
+  const clearRetryTimers = () => {
+    retryTimers.current.forEach(timer => clearTimeout(timer));
+    retryTimers.current = [];
+  };
+
   const refreshDashboard = useCallback(async () => {
     const run = async () => {
+      if (statusRef.current === 'ready') {
+        return;
+      }
       try {
         const data = await loadDashboard();
         setDashboard(data);
@@ -74,15 +88,13 @@ export const HomeScreen = ({
         );
       }
     };
-    run();
-    retryTimers.current.push(setTimeout(run, 2000));
-    retryTimers.current.push(setTimeout(run, 5000));
+    clearRetryTimers();
+    await run();
+    if (statusRef.current !== 'ready') {
+      retryTimers.current.push(setTimeout(run, 2000));
+      retryTimers.current.push(setTimeout(run, 5000));
+    }
   }, []);
-
-  const clearRetryTimers = () => {
-    retryTimers.current.forEach(timer => clearTimeout(timer));
-    retryTimers.current = [];
-  };
 
   useEffect(() => {
     refreshDashboard();

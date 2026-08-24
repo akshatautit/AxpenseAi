@@ -18,10 +18,6 @@ export const parseGenericTransactionSms = (
     /\b(debited|debited by|debited from|credited|credit|debit|spent|received|paid|withdrawn|withdrawal|transferred|transfer|transaction|payment|purchase|upi|neft|rtgs|imps|pos|wallet|emi|refund(?:ed)?|cashback|reversal|atm|ecs)\b|भुगतान|जमा|निकासी|धनराशि|काटा|रुपये/i;
 
   if (!transactionKeywords.test(text)) {
-    console.log(
-      '[SmsParser] reject: no transaction keyword:',
-      text.slice(0, 80),
-    );
     return null;
   }
 
@@ -34,10 +30,6 @@ export const parseGenericTransactionSms = (
     );
 
   if (!amountMatch) {
-    console.log(
-      '[SmsParser] reject: no amount:',
-      text.slice(0, 80),
-    );
     return null;
   }
 
@@ -68,10 +60,6 @@ export const parseGenericTransactionSms = (
   ) {
     type = 'debit';
   } else {
-    console.log(
-      '[SmsParser] reject: cannot determine debit/credit:',
-      text.slice(0, 80),
-    );
     return null;
   }
 

@@ -50,6 +50,8 @@ class SmsModule(reactContext: ReactApplicationContext) :
     )
 
     private const val SORT_DESC = "${COLUMN_DATE} DESC"
+
+    private const val MAX_QUERY_LIMIT = 2000
   }
 
   // Naya SMS aane par JS ko onNewSms event emit karta hai (live transactions).
@@ -112,16 +114,17 @@ class SmsModule(reactContext: ReactApplicationContext) :
   override fun getName(): String = NAME
 
   @ReactMethod
-  fun getAllSms(promise: Promise) {
-    query(Telephony.Sms.Inbox.CONTENT_URI, null, null, promise)
+  fun getAllSms(limit: Double, promise: Promise) {
+    query(Telephony.Sms.Inbox.CONTENT_URI, null, null, limit, promise)
   }
 
   @ReactMethod
-  fun getUnreadSms(promise: Promise) {
+  fun getUnreadSms(limit: Double, promise: Promise) {
     query(
       Telephony.Sms.Inbox.CONTENT_URI,
       "$COLUMN_READ = 0",
       null,
+      limit,
       promise,
     )
   }
@@ -132,6 +135,7 @@ class SmsModule(reactContext: ReactApplicationContext) :
       Telephony.Sms.Inbox.CONTENT_URI,
       "$COLUMN_ADDRESS = ?",
       arrayOf(address),
+      null,
       promise,
     )
   }
@@ -140,12 +144,18 @@ class SmsModule(reactContext: ReactApplicationContext) :
     uri: Uri,
     selection: String?,
     selectionArgs: Array<String>?,
+    limit: Double?,
     promise: Promise,
   ) {
     try {
       val resolver = reactApplicationContext.contentResolver
+      // Bridge par poori inbox laane se ANR/OOM hota hai — native hi LIMIT
+      // laga do (max MAX_QUERY_LIMIT tak).
+      val boundedLimit =
+        limit?.toInt()?.coerceIn(1, MAX_QUERY_LIMIT) ?: MAX_QUERY_LIMIT
+      val sortOrder = "$SORT_DESC LIMIT $boundedLimit"
       val cursor: Cursor? =
-        resolver.query(uri, PROJECTION, selection, selectionArgs, SORT_DESC)
+        resolver.query(uri, PROJECTION, selection, selectionArgs, sortOrder)
 
       cursor ?: run {
         promise.reject("SMS_READ_ERROR", "Unable to query SMS inbox")

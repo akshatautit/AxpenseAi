@@ -4,12 +4,14 @@ import {ensureSmsPermission} from './smsPermission';
 import {ParsedTransaction, SmsMessage} from './types';
 
 interface SmsNativeModule {
-  getAllSms(): Promise<SmsMessage[]>;
-  getUnreadSms(): Promise<SmsMessage[]>;
+  getAllSms(limit: number): Promise<SmsMessage[]>;
+  getUnreadSms(limit: number): Promise<SmsMessage[]>;
   getSmsByAddress(address: string): Promise<SmsMessage[]>;
 }
 
 const SmsModule = NativeModules.SmsModule as SmsNativeModule | undefined;
+
+const DEFAULT_LIMIT = 500;
 
 const requireSmsModule = (): SmsNativeModule => {
   if (!SmsModule) {
@@ -21,20 +23,24 @@ const requireSmsModule = (): SmsNativeModule => {
   return SmsModule;
 };
 
-export const getAllSms = async (): Promise<SmsMessage[]> => {
+export const getAllSms = async (
+  limit: number = DEFAULT_LIMIT,
+): Promise<SmsMessage[]> => {
   if (Platform.OS !== 'android') {
     return [];
   }
 
-  return requireSmsModule().getAllSms();
+  return requireSmsModule().getAllSms(limit);
 };
 
-export const getUnreadSms = async (): Promise<SmsMessage[]> => {
+export const getUnreadSms = async (
+  limit: number = DEFAULT_LIMIT,
+): Promise<SmsMessage[]> => {
   if (Platform.OS !== 'android') {
     return [];
   }
 
-  return requireSmsModule().getUnreadSms();
+  return requireSmsModule().getUnreadSms(limit);
 };
 
 export const getSmsByAddress = async (
@@ -56,7 +62,7 @@ export const readTransactionsFromSms = async ({
     throw new Error('READ_SMS permission not granted');
   }
 
-  const messages = await getAllSms();
+  const messages = await getAllSms(limit);
 
   const transactions: ParsedTransaction[] = [];
 
@@ -66,17 +72,6 @@ export const readTransactionsFromSms = async ({
     if (parsed) {
       transactions.push(parsed);
     }
-  }
-
-  // Log parsed transactions for debugging (show up to the requested limit)
-  try {
-    console.log(`[SmsReader] parsed ${transactions.length} transactions`);
-    const toLog = transactions.slice(0, limit);
-    toLog.forEach((t, i) => {
-      console.log(`[SmsReader] transaction ${i + 1}:`, JSON.stringify(t));
-    });
-  } catch (e) {
-    console.log('[SmsReader] error logging transactions', e);
   }
 
   return transactions.slice(0, limit);

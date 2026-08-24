@@ -15,27 +15,27 @@ const BANK_SENDERS: Array<[RegExp, string]> = [
   [/YESBANK/i, 'Yes Bank'],
   [/IDFCBK/i, 'IDFC First Bank'],
   [/INDB|INDUS|VM-INDUS/i, 'IndusInd Bank'],
-  [/RBLBK|VM-RBL|RBL/i, 'RBL Bank'],
+  [/RBLBK|VM-RBL|^RBL/i, 'RBL Bank'],
   [/BANDHAN|VM-BANDHAN|BANDBK/i, 'Bandhan Bank'],
 
   // PSU (government) banks
   [/SBIINB|SBIUPI|SBIIN/i, 'State Bank of India'],
-  [/PNBSMS|PNB/i, 'Punjab National Bank'],
-  [/BOBSMS|BOB/i, 'Bank of Baroda'],
+  [/PNBSMS|^PNB/i, 'Punjab National Bank'],
+  [/BOBSMS|^BOB/i, 'Bank of Baroda'],
   [/CBSCNB|CNB|VM-CANARA/i, 'Canara Bank'],
-  [/BOIMSG|VM-BOI|BOI/i, 'Bank of India'],
-  [/CBISMS|VM-CBI|CBI/i, 'Central Bank of India'],
+  [/BOIMSG|VM-BOI|^BOI/i, 'Bank of India'],
+  [/CBISMS|VM-CBI|^CBI/i, 'Central Bank of India'],
   [/INBK|VM-INBK|INDIANBK/i, 'Indian Bank'],
-  [/IOBSMS|VM-IOB|IOB/i, 'Indian Overseas Bank'],
+  [/IOBSMS|VM-IOB|^IOB/i, 'Indian Overseas Bank'],
   [/BOMBANK|VM-BOMBANK|BMSMS/i, 'Bank of Maharashtra'],
-  [/PSBSMS|VM-PSB|PSB/i, 'Punjab & Sind Bank'],
-  [/UBI/i, 'Union Bank of India'],
+  [/PSBSMS|VM-PSB|^PSB/i, 'Punjab & Sind Bank'],
+  [/^UBI/i, 'Union Bank of India'],
   [/JKBK|VM-JKBK/i, 'Jammu & Kashmir Bank'],
 
   // Private / old private banks
   [/FEDBANK/i, 'Federal Bank'],
-  [/SIBM|VM-SIBM|SIB/i, 'South Indian Bank'],
-  [/TMB/i, 'Tamilnad Mercantile Bank'],
+  [/SIBM|VM-SIBM|^SIB/i, 'South Indian Bank'],
+  [/^TMB/i, 'Tamilnad Mercantile Bank'],
   [/KARNBK|VM-KARNBK/i, 'Karnataka Bank'],
   [/KVB|VM-KVB/i, 'Karur Vysya Bank'],
   [/CITYUNION|VM-CUB|^CUB/i, 'City Union Bank'],
@@ -127,11 +127,6 @@ export const parseSmsMessage = (
     );
 
   if (!senderBank && !hasAccountReference && !hasStrongTransactionVerb) {
-    console.log(
-      '[SmsParser] reject: unknown sender, no account ref, no strong verb:',
-      message.address,
-      message.body.slice(0, 80),
-    );
     return null;
   }
 
